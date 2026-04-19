@@ -1,0 +1,30 @@
+# Virtual environment
+venv/
+venv/**/*
+*.pyc
+__pycache__/
+__pycache__/**
+*.pyc
+
+# Credentials - NEVER commit
+config.json
+
+# Python
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
