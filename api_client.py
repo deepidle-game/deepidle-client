@@ -1,7 +1,10 @@
+import os
 import requests
 
 class APIClient:
-    def __init__(self, base_url="http://localhost:3000/api", source="Unknown"):
+    def __init__(self, base_url=None, source="Unknown"):
+        if base_url is None:
+            base_url = os.environ.get("GAME_API_URL", "http://localhost:3000/api")
         self.base_url = base_url
         self.token = None
         self.headers = {
@@ -26,10 +29,38 @@ class APIClient:
             return data
         return None
 
-    def signup(self, username, password):
+    def signup(self, username, password, character_name=""):
         url = f"{self.base_url}/auth/signup"
-        response = requests.post(url, json={"username": username, "password": password})
+        response = requests.post(url, json={"username": username, "password": password, "character_name": character_name})
         if response.status_code == 200 or response.status_code == 201:
+            return response.json()
+        return None
+
+    def get_character_detail(self):
+        url = f"{self.base_url}/character/detail"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+    def list_characters(self):
+        url = f"{self.base_url}/characters/list"
+        response = requests.get(url, headers=self.headers)
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+    def create_character(self, name):
+        url = f"{self.base_url}/characters/create"
+        response = requests.post(url, headers=self.headers, json={"name": name})
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+    def select_character(self, character_id):
+        url = f"{self.base_url}/characters/select"
+        response = requests.post(url, headers=self.headers, json={"character_id": character_id})
+        if response.status_code == 200:
             return response.json()
         return None
 

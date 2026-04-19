@@ -14,14 +14,22 @@ class LoginScreen(Screen):
             yield Label("Please Login or Signup")
             yield Input(placeholder="Username", id="username")
             yield Input(placeholder="Password", password=True, id="password")
+            yield Input(placeholder="Character Name (for signup)", id="character-name")
+            yield Label("", id="char-name-hint")
             with Horizontal(id="login-buttons"):
                 yield Button("Login", variant="primary", id="btn-login")
                 yield Button("Signup", variant="default", id="btn-signup")
             yield Label("", id="login-error")
 
+    def on_mount(self) -> None:
+        char_name_input = self.query_one("#character-name")
+        char_name_input.styles.height = "0"
+        self.query_one("#char-name-hint").styles.height = "0"
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         username = self.query_one("#username", Input).value
         password = self.query_one("#password", Input).value
+        char_name = self.query_one("#character-name", Input).value
         error_label = self.query_one("#login-error", Label)
 
         if event.button.id == "btn-login":
@@ -31,7 +39,12 @@ class LoginScreen(Screen):
             else:
                 error_label.update("[red]Invalid credentials[/red]")
         elif event.button.id == "btn-signup":
-            data = self.app.api.signup(username, password)
+            if len(username) < 3:
+                error_label.update("[red]Username must be at least 3 characters[/red]")
+                return
+            if not char_name:
+                char_name = username
+            data = self.app.api.signup(username, password, char_name)
             if data:
                 error_label.update("[green]Account created! Now login.[/green]")
             else:
@@ -188,12 +201,27 @@ class GameScreen(Screen):
             try:
                 container = self.query_one("#game-main-container")
                 width = container.size.width if hasattr(container, 'size') else 100
-                if width < 80 and self._map_visible:
-                    self.game_map.add_class("hidden")
-                    self._map_visible = False
-                elif width >= 80 and not self._map_visible:
-                    self.game_map.remove_class("hidden")
-                    self._map_visible = True
+                if width < 80:
+                    if self._map_visible or not self.game_map.has_class("hidden"):
+                        self.game_map.add_class("hidden")
+                        self.game_map.remove_class("compact")
+                        self.game_map.set_compact(False)
+                        self._map_visible = False
+                elif width < 100:
+                    if not self._map_visible:
+                        self.game_map.remove_class("hidden")
+                        self.game_map.add_class("compact")
+                        self.game_map.set_compact(True)
+                        self._map_visible = True
+                    elif not self.game_map.has_class("compact"):
+                        self.game_map.add_class("compact")
+                        self.game_map.set_compact(True)
+                else:
+                    if not self._map_visible or self.game_map.has_class("compact"):
+                        self.game_map.remove_class("hidden")
+                        self.game_map.remove_class("compact")
+                        self.game_map.set_compact(False)
+                        self._map_visible = True
             except Exception:
                 pass
             self.set_timer(0.5, check_size)
@@ -416,6 +444,52 @@ class NameChangeScreen(Screen):
                 self.query_one("#name-title", Label).update("[red]Failed to update name[/red]")
         else:
             self.app.pop_screen()
+
+
+class CharacterSelectScreen(Screen):
+    def __init__(self, characters):
+        super().__init__()
+        self.characters = characters
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="char-select-container"):
+            yield Label("SELECT CHARACTER", id="char-select-title")
+            for char in self.characters:
+                char_id = char.get("id", "")
+                char_name = char.get("name", "Unknown")
+                char_level = char.get("level", 1)
+                yield Button(f" {char_name} (Lv.{char_level})", id=f"btn-char-{char_id}", variant="primary")
+            yield Button("Create New Character", id="btn-create-char", variant="default")
+            yield Input(placeholder="New Character Name", id="new-char-name")
+            yield Label("", id="char-select-error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id.startswith("btn-char-"):
+            char_id = event.button.id.replace("btn-char-", "")
+            result = self.app.api.select_character(char_id)
+            if result:
+                new_token = result.get("token")
+                if new_token:
+                    self.app.api.set_token(new_token)
+                    self.app.user_data["token"] = new_token
+                self.app.push_screen(GameScreen())
+            else:
+                self.query_one("#char-select-error", Label).update("[red]Failed to select character[/red]")
+        elif event.button.id == "btn-create-char":
+            new_name = self.query_one("#new-char-name", Input).value
+            if len(new_name) < 3:
+                self.query_one("#char-select-error", Label).update("[red]Name must be at least 3 characters[/red]")
+                return
+            result = self.app.api.create_character(new_name)
+            if result:
+                characters = self.app.api.list_characters()
+                if characters and characters.get("characters"):
+                    chars = characters["characters"]
+                    self.app.push_screen(CharacterSelectScreen(chars))
+                else:
+                    self.app.push_screen(GameScreen())
+            else:
+                self.query_one("#char-select-error", Label).update("[red]Failed to create character[/red]")
 
 
 from textual.widgets import Select

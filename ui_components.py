@@ -70,12 +70,14 @@ class InventoryPanel(Static):
 class ActionAnimation(Static):
     current_action = reactive("idle")
     frame_index = reactive(0)
+    current_zone = reactive("idle")
     
     def compose(self) -> ComposeResult:
         yield Label("═══ ACTIONS ═══", id="action-title")
         with Horizontal(id="animation-container"):
             yield Static("", id="action-animation")
         yield Label("", id="action-name")
+        yield Label("", id="action-zone")
     
     def on_mount(self):
         self.set_timer(0.1, self._run_frame)
@@ -105,6 +107,18 @@ class ActionAnimation(Static):
         self.query_one("#action-animation", Static).update(f"[cyan]{frame}[/cyan]")
         self.query_one("#action-name", Label).update(f"[bold yellow]{name}[/bold yellow]")
         
+        zone_text = ""
+        zone_icons = {"forest": "🌲", "mines": "⛏️", "battle": "⚔️", "idle": "🏠"}
+        if self.current_zone != "idle":
+            zone_text = f"[dim]@ {zone_icons.get(self.current_zone, '')}[/dim]"
+        
+        zone_label = self.query_one("#action-zone", Label)
+        if zone_text:
+            zone_label.update(zone_text)
+            zone_label.styles.display = "block"
+        else:
+            zone_label.styles.display = "none"
+        
         self.frame_index += 1
         self.set_timer(interval, self._run_frame)
     
@@ -112,12 +126,16 @@ class ActionAnimation(Static):
         n = action_name.lower().replace("-", "_").replace(" ", "_")
         if "cut" in n or "wood" in n:
             self.current_action = "cutting_wood"
+            self.current_zone = "forest"
         elif "mine" in n or "rock" in n or "stone" in n:
             self.current_action = "mining_rocks"
+            self.current_zone = "mines"
         elif "fight" in n or "monster" in n or "gold" in n:
             self.current_action = "fighting_monsters"
+            self.current_zone = "battle"
         else:
             self.current_action = "idle"
+            self.current_zone = "idle"
         self.frame_index = 0
 
 
@@ -137,6 +155,7 @@ class ThoughtLog(RichLog):
 
 class GameMapPanel(Static):
     player_zone = reactive("idle")
+    compact_mode = reactive(False)
     
     def compose(self) -> ComposeResult:
         yield Label("═══ WORLD MAP ═══", id="map-title")
@@ -154,6 +173,21 @@ class GameMapPanel(Static):
     
     def on_mount(self):
         self.update_player_position("idle")
+    
+    def set_compact(self, compact: bool):
+        self.compact_mode = compact
+        forest = self.query_one("#forest-grid", Static)
+        mines = self.query_one("#mines-grid", Static)
+        battle = self.query_one("#battle-grid", Static)
+        
+        if compact:
+            forest.update("🌲🌲\n🌲🌲")
+            mines.update("🪨🪨\n🪨🪨")
+            battle.update("👹👹\n👹👹")
+        else:
+            forest.update("🌲🌲🌲\n🌲🌲🌲\n🌲🌲🌲")
+            mines.update("🪨🪨🪨\n🪨🪨🪨\n🪨🪨🪨")
+            battle.update("👹👹👹\n👹👹👹\n👹👹👹")
     
     def update_player_position(self, action: str):
         action = action.lower().replace("-", "_").replace(" ", "_")
@@ -176,4 +210,11 @@ class GameMapPanel(Static):
                 el.remove_class("active-zone")
         
         zone_names = {"forest": "🌲 FOREST", "mines": "⛏️ MINES", "battle": "⚔️ BATTLE", "idle": "🏠 BASE"}
-        self.query_one("#map-player-pos", Label).update(f"[bold yellow]► Player at: {zone_names.get(zone, 'UNKNOWN')}[/bold yellow]")
+        zone_icons = {"forest": "🌲", "mines": "⛏️", "battle": "⚔️", "idle": "🏠"}
+        
+        if self.compact_mode:
+            pos_text = f"[bold yellow]► {zone_icons.get(zone, '?')}[/bold yellow]"
+        else:
+            pos_text = f"[bold yellow]► Player at: {zone_names.get(zone, 'UNKNOWN')}[/bold yellow]"
+        
+        self.query_one("#map-player-pos", Label).update(pos_text)

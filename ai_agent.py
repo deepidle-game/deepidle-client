@@ -88,8 +88,11 @@ def fetch_game_state(client):
     storage = client.get_global_storage()
     storage_items = parse_storage(storage)
     
+    char_id = status.get("id", "")
+    
     return {
         "character": {
+            "id": char_id,
             "name": status.get("name"),
             "level": status.get("level"),
             "action": status.get("current_action")
@@ -270,7 +273,8 @@ def main():
     
     print("🚀 AI Agent (litellm) started...", flush=True)
     
-    client = APIClient(source="AI-Agent")
+    api_url = os.environ.get("GAME_API_URL", "http://localhost:3000/api")
+    client = APIClient(base_url=api_url, source="AI-Agent")
     client.set_token(token)
     
     system_prompt = build_system_prompt(lang)

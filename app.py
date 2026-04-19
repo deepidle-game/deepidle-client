@@ -4,7 +4,7 @@ from textual.app import App
 from textual.binding import Binding
 
 from api_client import APIClient
-from screens import LoginScreen, AIConfigScreen, GameScreen, NameChangeScreen
+from screens import LoginScreen, AIConfigScreen, GameScreen, NameChangeScreen, CharacterSelectScreen
 
 
 class DeepIdleApp(App):
@@ -108,7 +108,7 @@ ActionLog, ThoughtLog {
     overflow-x: hidden;
 }
 #action-display {
-    height: 20;
+    height: 16;
 }
 #action-display > #animation-container {
     align: center middle;
@@ -120,51 +120,16 @@ ActionLog, ThoughtLog {
 }
 #action-name {
     content-align: center middle;
+    margin: 0;
 }
-    #game-map {
-        height: 18;
-        border-top: ascii #5d4d24;
-        padding: 1;
-    }
-    #game-map.hidden {
-        display: none;
-    }
-#map-title {
+#action-zone {
     content-align: center middle;
-    text-style: bold;
-    color: #66ffcc;
-    margin-bottom: 1;
+    display: none;
+    margin: 0;
 }
-#map-zones {
-    height: 1fr;
-    align: center middle;
+#action-title {
+    margin: 0;
 }
-.map-zone {
-    width: 20;
-    height: 100%;
-    align: center middle;
-    border: ascii #5d4d24;
-    margin: 0 1;
-    padding: 1;
-}
-.map-zone.active-zone {
-    border: ascii #66ffcc;
-    background: #141420;
-}
-.zone-label {
-    content-align: center middle;
-    text-style: bold;
-    margin-bottom: 1;
-}
-#forest-grid, #mines-grid, #battle-grid {
-    content-align: center middle;
-    text-style: bold;
-    width: 100%;
-}
-    #map-player-pos {
-        content-align: center middle;
-        margin-top: 1;
-    }
     """
 
     BINDINGS = [
@@ -210,7 +175,11 @@ ActionLog, ThoughtLog {
 
     def on_login_success(self, data):
         self.user_data = data
-        self.push_screen(GameScreen())
+        characters = data.get("characters", [])
+        if len(characters) >= 1:
+            self.push_screen(CharacterSelectScreen(characters))
+        else:
+            self.push_screen(GameScreen())
 
 
 if __name__ == "__main__":
