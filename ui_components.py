@@ -3,9 +3,12 @@ from textual.containers import Vertical, Horizontal
 from textual.widgets import Static, Label, RichLog
 from textual.reactive import reactive
 
+from frames import IDLE_FRAMES, WOOD_FRAMES, ROCK_FRAMES, FIGHT_FRAMES
+
+
 class ObjectivePanel(Static):
     def compose(self) -> ComposeResult:
-        yield Label("🎯 OBJECTIVES", id="obj-title")
+        yield Label("═══ OBJECTIVES ═══", id="obj-title")
         yield Vertical(id="obj-list")
 
     def update_objectives(self, objectives):
@@ -18,6 +21,7 @@ class ObjectivePanel(Static):
             for sub in obj.get("sub_tasks", []):
                 sub_status = "[green]✔[/green]" if sub.get("completed") else "[ ]"
                 container.mount(Label(f"  └─ {sub_status} {sub.get('text')}", classes="obj-sub"))
+
 
 class InventorySlot(Static):
     item_name = reactive("EMPTY")
@@ -34,9 +38,10 @@ class InventorySlot(Static):
             return f"{self.item_icon} [bold]{display_name}[/bold] [yellow]Lv.{self.level}[/yellow] [cyan]x{self.quantity}[/cyan]"
         return f"{self.item_icon} [bold]{display_name}[/bold] [cyan]x{self.quantity}[/cyan]"
 
+
 class InventoryPanel(Static):
     def compose(self) -> ComposeResult:
-        yield Label("🎒 INVENTORY (5 Slots)", id="inv-title")
+        yield Label("═══ INVENTORY ═══", id="inv-title")
         with Horizontal(id="slots-container"):
             yield InventorySlot(id="slot-0")
             yield InventorySlot(id="slot-1")
@@ -61,126 +66,13 @@ class InventoryPanel(Static):
                 slot.level = 0
                 slot.add_class("empty")
 
-IDLE_FRAMES = [
-    """
-     zZzz
-    zZZZzz
-   zZZZZZzz
-  _________
- |  .___.  |
- |  |   |  |
- |__|___|__|
-""",
-    """
-     zZzz  
-    zZZZzz 
-   zZZZZZzz
-  _________
- |  .___.  |
- |  |   |  |
- |__|___|__|
-""",
-]
-
-WOOD_FRAMES = [
-    """
-      ___
-     /   \\
-    |  A  |
-     \\___/
-        |
-   -----+-----
-   |  | |  |
-   |  | |  |
-  /===|*|===\\ """,
-    """
-      ___
-     /   \\
-    |  A  |
-     \\___/
-        |
-   -----+-----
-   |  |/|  |
-   |  / |  |
-  /====|*=====""",
-    """
-      ___
-     /   \\
-    |  A  |
-     \\___/
-        |
-   -----+-----
-   |  |\\|  |
-   |   \\|  |
-  /===|*|====""",
-]
-
-ROCK_FRAMES = [
-    """
-        /\\
-       /**\\
-      /****\\
-     /______\\
-        ||
-    ====**====
-   /|  |  |  |\\
-  / |  |  |  | \\""",
-    """
-        /\\
-       /**\\
-      /****\\
-     /______\\
-        ||
-    ====**====
-   /|  |  |  |\\
-  / |  |  |  | \\""",
-    """
-        /\\
-       /**\\
-      /****\\
-     /______\\
-        ||
-    ====**====
-   /|  |  |  |\\
-  / |  |  |  | \\""",
-]
-
-FIGHT_FRAMES = [
-    """
-       O
-      /|\\
-      / \\
-     /___\\
-      |  |>>
-    --+--<<<<<
-     /|\\ |||
-    / | \\|||""",
-    """
-       O
-      /|\\
-      / \\
-     /___\\
-    <><  |
-    >>>>
-     /|\\ |||
-    / | \\|||""",
-    """
-       O
-      /|\\
-      / \\
-     /___\\
-    |  <><
-    <<<<
-     /|\\ |||
-    / | \\|||""",
-]
 
 class ActionAnimation(Static):
     current_action = reactive("idle")
     frame_index = reactive(0)
     
     def compose(self) -> ComposeResult:
-        yield Label("[bold]⚔️ ACTIONS[/bold]", id="action-title")
+        yield Label("═══ ACTIONS ═══", id="action-title")
         with Horizontal(id="animation-container"):
             yield Static("", id="action-animation")
         yield Label("", id="action-name")
@@ -228,11 +120,13 @@ class ActionAnimation(Static):
             self.current_action = "idle"
         self.frame_index = 0
 
+
 class ActionLog(RichLog):
     def __init__(self, *args, **kwargs):
         kwargs["markup"] = True
         kwargs["wrap"] = True
         super().__init__(*args, **kwargs)
+
 
 class ThoughtLog(RichLog):
     def __init__(self, *args, **kwargs):
@@ -240,11 +134,12 @@ class ThoughtLog(RichLog):
         kwargs["wrap"] = True
         super().__init__(*args, **kwargs)
 
+
 class GameMapPanel(Static):
     player_zone = reactive("idle")
     
     def compose(self) -> ComposeResult:
-        yield Label("🗺️ WORLD MAP", id="map-title")
+        yield Label("═══ WORLD MAP ═══", id="map-title")
         with Horizontal(id="map-zones"):
             with Vertical(id="zone-forest", classes="map-zone"):
                 yield Label("🌲 FOREST", classes="zone-label")

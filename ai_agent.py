@@ -4,18 +4,19 @@ import time
 import re
 from api_client import APIClient
 
+MAX_MESSAGES = 20
+
+
 def strip_ansi(text):
-    """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r'\x1B\[[0-9;]*m')
     return ansi_escape.sub('', text)
 
+
 def run_llm(messages, model, api_key, api_base=None, provider=None):
-    """Run LLM via litellm with conversation history and return the response text."""
     try:
         import litellm
         litellm.drop_params = True
         
-        # Prepend provider prefix if needed
         full_model = model
         if provider == "minimax" and not model.startswith("minimax/"):
             full_model = f"minimax/{model}"
@@ -24,81 +25,146 @@ def run_llm(messages, model, api_key, api_base=None, provider=None):
         elif provider == "google" and not model.startswith("gemini/"):
             full_model = f"gemini/{model}"
         
-        kwargs = {
-            "model": full_model,
-            "messages": messages,
-            "api_key": api_key,
-        }
-        
+        kwargs = {"model": full_model, "messages": messages, "api_key": api_key}
         if api_base:
             kwargs["api_base"] = api_base
         
         response = litellm.completion(**kwargs)
-        
         return response.choices[0].message.content
         
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-def parse_decision(text):
-    """Parse DECISION: action(value) from LLM response."""
-    # Try DECISION: action(value) or DECISION: action
-    match = re.search(r'DECISION:\s*(\w+)(?:\(([^)]*)\))?', text, re.IGNORECASE)
-    if match:
-        action = match.group(1).lower()
-        value = match.group(2) if match.group(2) else None
-        
-        # Remove quotes if present
-        if value and value.startswith('"') and value.endswith('"'):
-            value = value[1:-1]
-        
-        # Clean up thought: everything except the DECISION line
-        thought = re.sub(r'DECISION:\s*(\w+(?:\([^)]*\))?)', '', text, flags=re.IGNORECASE).strip()
-        
-        return {
-            "thought": thought,
-            "action": action,
-            "value": value,
-            "item_id": value
-        }
-    return None
 
-def main():
-    token = os.environ.get("AUTH_TOKEN")
-    config_json = os.environ.get("AI_CONFIG", "{}")
+def parse_decision(text):
+    match = re.search(r'DECISION:\s*(\w+)(?:\(([^)]*)\))?', text, re.IGNORECASE)
+    if not match:
+        return None
     
-    try:
-        ai_config = json.loads(config_json)
-    except:
-        ai_config = {}
+    action = match.group(1).lower()
+    value = match.group(2) if match.group(2) else None
     
-    provider = ai_config.get("provider", "openai")
-    api_key = ai_config.get("api_key", "")
-    model = ai_config.get("model", "gpt-4o")
-    api_base = ai_config.get("api_base", "")
-    lang = ai_config.get("language", "Thai")
+    if value and value.startswith('"') and value.endswith('"'):
+        value = value[1:-1]
     
-    if not token:
-        return
+    thought = re.sub(r'DECISION:\s*(\w+(?:\([^)]*\))?)', '', text, flags=re.IGNORECASE).strip()
     
-    if not api_key:
-        print("ERROR: No API key configured")
-        return
+    return {"thought": thought, "action": action, "value": value, "item_id": value}
+
+
+def parse_inventory(inv):
+    inv_list = []
+    if isinstance(inv, dict) and "inventory" in inv:
+        inv_list = inv.get("inventory") or []
+    elif isinstance(inv, list):
+        inv_list = inv
     
-    print("🚀 AI Agent (litellm) started...", flush=True)
+    inv_items = {}
+    if isinstance(inv_list, list):
+        for item in inv_list:
+            if item:
+                inv_items[item.get("item_id", "")] = item.get("quantity", 0)
+    return inv_list, inv_items
+
+
+def parse_storage(storage):
+    storage_items = {}
+    if isinstance(storage, dict) and isinstance(storage.get("storage"), list):
+        for item in storage.get("storage", []):
+            if item:
+                storage_items[item.get("item_id", "")] = item.get("quantity", 0)
+    return storage_items
+
+
+def fetch_game_state(client):
+    status = client.get_character_detail()
+    inv = client.get_inventory()
+    upgrade_opts = client.get_upgrade_options()
     
-    client = APIClient(source="AI-Agent")
-    client.set_token(token)
+    if not status or not inv:
+        return None
     
-    instructions = "You are an AI playing DeepIdle. Your goal is to upgrade items by gathering resources and spending them wisely."
+    inv_list, inv_items = parse_inventory(inv)
+    storage = client.get_global_storage()
+    storage_items = parse_storage(storage)
+    
+    return {
+        "character": {
+            "name": status.get("name"),
+            "level": status.get("level"),
+            "action": status.get("current_action")
+        },
+        "inventory": inv_list,
+        "inventory_summary": inv_items,
+        "global_storage": storage_items,
+        "upgrade_requirements": upgrade_opts if isinstance(upgrade_opts, dict) else {}
+    }
+
+
+def execute_action(client, decision):
+    action_type = decision.get("action")
+    thought = decision.get("thought", "Thinking...")
+    print(f"🧠 AI Thought: {thought}", flush=True)
+    
+    if action_type in ("set_action", "set_character_action"):
+        val = decision.get("value")
+        print(f"🎯 Action: Setting action to {val}", flush=True)
+        client.set_action(val)
+    
+    elif action_type in ("upgrade", "upgrade_item"):
+        item = decision.get("item_id")
+        print(f"🎯 Action: Upgrading {item}", flush=True)
+        client.upgrade_item(item)
+    
+    elif action_type in ("claim", "claim_resources"):
+        inv = client.get_inventory()
+        inv_count = 0
+        if isinstance(inv, dict) and "inventory" in inv:
+            inv_count = len(inv.get("inventory", []))
+        elif isinstance(inv, list):
+            inv_count = len(inv)
+        
+        if inv_count >= 5:
+            print(f"⚠️ Cannot claim - inventory is full ({inv_count}/5)! Must deposit first.", flush=True)
+        else:
+            print("🎯 Action: Claiming resources", flush=True)
+            client.claim_resources()
+    
+    elif action_type in ("deposit", "deposit_to_storage"):
+        parts = decision.get("value", "").split(",")
+        if len(parts) >= 2:
+            item_id = parts[0].strip()
+            quantity = int(parts[1].strip())
+            print(f"🎯 Action: Depositing {quantity} {item_id} to storage", flush=True)
+            client.deposit_to_storage(item_id, quantity)
+        else:
+            print(f"❓ Invalid deposit format: {decision.get('value')}", flush=True)
+    
+    elif action_type in ("withdraw", "withdraw_from_storage"):
+        parts = decision.get("value", "").split(",")
+        if len(parts) >= 2:
+            item_id = parts[0].strip()
+            quantity = int(parts[1].strip())
+            print(f"🎯 Action: Withdrawing {quantity} {item_id} from storage", flush=True)
+            client.withdraw_from_storage(item_id, quantity)
+        else:
+            print(f"❓ Invalid withdraw format: {decision.get('value')}", flush=True)
+    
+    elif action_type in ("check_upgrade_requirements", "continue", "continue_current_action"):
+        print(f"ℹ️ INFO: {action_type} - no action needed, current action continues", flush=True)
+    
+    else:
+        print(f"❓ Unknown action: {action_type}", flush=True)
+
+
+def build_system_prompt(lang):
     try:
         with open("howtoplay.md", "r") as f:
             instructions = f.read()
     except Exception:
-        pass
+        instructions = "You are an AI playing DeepIdle. Your goal is to upgrade items by gathering resources and spending them wisely."
     
-    # Build system prompt
-    system_prompt = f"""### INSTRUCTIONS
+    return f"""### INSTRUCTIONS
 {instructions}
 
 ### LANGUAGE
@@ -181,138 +247,67 @@ DECISION: deposit_to_storage(wooden_sword, 1)
 # You must: withdraw_from_storage(wooden_sword, 1) first!
 # Or if it's in global storage from another player
 """
+
+
+def main():
+    token = os.environ.get("AUTH_TOKEN")
+    config_json = os.environ.get("AI_CONFIG", "{}")
     
-    # Initialize conversation with system prompt
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
+    try:
+        ai_config = json.loads(config_json)
+    except:
+        ai_config = {}
     
-    # Keep only last N messages to avoid token limit
-    MAX_MESSAGES = 20
+    provider = ai_config.get("provider", "openai")
+    api_key = ai_config.get("api_key", "")
+    model = ai_config.get("model", "gpt-4o")
+    api_base = ai_config.get("api_base", "")
+    lang = ai_config.get("language", "Thai")
+    
+    if not token or not api_key:
+        print("ERROR: No auth token or API key configured")
+        return
+    
+    print("🚀 AI Agent (litellm) started...", flush=True)
+    
+    client = APIClient(source="AI-Agent")
+    client.set_token(token)
+    
+    system_prompt = build_system_prompt(lang)
+    messages = [{"role": "system", "content": system_prompt}]
     
     while True:
         try:
             print("AGENT: Analyzing game state...", flush=True)
-            status = client.get_character_detail()
-            inv = client.get_inventory()
-            upgrade_opts = client.get_upgrade_options()
+            state = fetch_game_state(client)
             
-            if not status or not inv:
+            if not state:
                 print("ERROR: Failed to fetch state. Retrying...", flush=True)
                 time.sleep(5)
                 continue
             
-            # Parse inventory into a more usable dict
-            inv_items = {}
-            inv_list = []
-            if isinstance(inv, dict) and "inventory" in inv:
-                inv_list = inv.get("inventory") or []
-            elif isinstance(inv, list):
-                inv_list = inv
-            if isinstance(inv_list, list):
-                for item in inv_list:
-                    if item:
-                        inv_items[item.get("item_id", "")] = item.get("quantity", 0)
-            
-            # Get global storage
-            storage = client.get_global_storage()
-            storage_items = {}
-            if isinstance(storage, dict) and isinstance(storage.get("storage"), list):
-                for item in storage.get("storage", []):
-                    if item:
-                        storage_items[item.get("item_id", "")] = item.get("quantity", 0)
-            
-            state_summary = {
-                "character": {
-                    "name": status.get("name"),
-                    "level": status.get("level"),
-                    "action": status.get("current_action")
-                },
-                "inventory": inv_list,
-                "inventory_summary": inv_items,
-                "global_storage": storage_items,
-                "upgrade_requirements": upgrade_opts if isinstance(upgrade_opts, dict) else {}
-            }
-            
             user_prompt = f"""### CURRENT GAME STATE
-{json.dumps(state_summary, indent=2)}
+{json.dumps(state, indent=2)}
 
 ### TASK
 Based on the state, decide your next move. End with DECISION: action_type
 """
             
-            # Add user message
             messages.append({"role": "user", "content": user_prompt})
-            
             print("AGENT: Thinking via LLM...", flush=True)
+            
             raw_output = run_llm(messages, model, api_key, api_base if api_base else None, provider)
-            
-            # Strip ANSI codes
             clean_output = strip_ansi(raw_output)
-            
-            # Add assistant response to history
             messages.append({"role": "assistant", "content": clean_output})
             
-            # Trim history to keep only last MAX_MESSAGES
             if len(messages) > MAX_MESSAGES:
-                # Keep system prompt + last N messages
                 messages = [messages[0]] + messages[-(MAX_MESSAGES-1):]
             
             print("AGENT: Processing AI decision...", flush=True)
-            
             decision = parse_decision(clean_output)
             
             if decision:
-                thought = decision.get("thought", "Thinking...")
-                action_type = decision.get("action")
-                
-                print(f"🧠 AI Thought: {thought}", flush=True)
-                
-                if action_type in ("set_action", "set_character_action"):
-                    val = decision.get("value")
-                    print(f"🎯 Action: Setting action to {val}", flush=True)
-                    client.set_action(val)
-                elif action_type in ("upgrade", "upgrade_item"):
-                    item = decision.get("item_id")
-                    print(f"🎯 Action: Upgrading {item}", flush=True)
-                    client.upgrade_item(item)
-                elif action_type in ("claim", "claim_resources"):
-                    # Check if inventory is full before claiming
-                    inv = client.get_inventory()
-                    inv_count = 0
-                    if isinstance(inv, dict) and "inventory" in inv:
-                        inv_count = len(inv.get("inventory", []))
-                    elif isinstance(inv, list):
-                        inv_count = len(inv)
-                    
-                    if inv_count >= 5:
-                        print(f"⚠️ Cannot claim - inventory is full ({inv_count}/5)! Must deposit first.", flush=True)
-                    else:
-                        print("🎯 Action: Claiming resources", flush=True)
-                        client.claim_resources()
-                elif action_type in ("deposit", "deposit_to_storage"):
-                    parts = decision.get("value", "").split(",")
-                    if len(parts) >= 2:
-                        item_id = parts[0].strip()
-                        quantity = int(parts[1].strip())
-                        print(f"🎯 Action: Depositing {quantity} {item_id} to storage", flush=True)
-                        client.deposit_to_storage(item_id, quantity)
-                    else:
-                        print(f"❓ Invalid deposit format: {decision.get('value')}", flush=True)
-                elif action_type in ("withdraw", "withdraw_from_storage"):
-                    parts = decision.get("value", "").split(",")
-                    if len(parts) >= 2:
-                        item_id = parts[0].strip()
-                        quantity = int(parts[1].strip())
-                        print(f"🎯 Action: Withdrawing {quantity} {item_id} from storage", flush=True)
-                        client.withdraw_from_storage(item_id, quantity)
-                    else:
-                        print(f"❓ Invalid withdraw format: {decision.get('value')}", flush=True)
-                elif action_type in ("check_upgrade_requirements", "continue", "continue_current_action"):
-                    # These are not real actions - just info or no action needed
-                    print(f"ℹ️ INFO: {action_type} - no action needed, current action continues", flush=True)
-                else:
-                    print(f"❓ Unknown action: {action_type}", flush=True)
+                execute_action(client, decision)
             else:
                 print(f"⚠️ No DECISION found in LLM response", flush=True)
                 print(f"RAW: {clean_output}", flush=True)
@@ -322,6 +317,7 @@ Based on the state, decide your next move. End with DECISION: action_type
         except Exception as e:
             print(f"ERROR: {str(e)}", flush=True)
             time.sleep(5)
+
 
 if __name__ == "__main__":
     main()
