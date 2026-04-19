@@ -197,6 +197,12 @@ You MUST respond and think in {lang}.
 - ถ้าเก็บ resources ครบ 5 ชนิด = เต็ม = claim_resources จะล้มเหลว!
 - เต็มแล้วต้อง: deposit ไป global storage ก่อน แล้วค่อย withdraw กลับมา
 
+### UPGRADE ต้องเตรียม materials 3 อย่าง (เช่น stone_pickaxe ต้อง stone, wood, gold)
+- ถ้า inventory เต็ม และ upgrade ต้องการ 3 materials แต่มีslotว่างแค่ 2
+- วิธีแก้: deposit equipment/tools ที่ไม่ได้ใช้ไป global storage ก่อน
+- เช่น ถ้าไม่ได้ใช้ wooden_sword ให้ deposit_to_storage(wooden_sword, 1) ก่อน
+- หลัง upgrade เสร็จ สามารถ withdraw กลับมาได้
+
 ### IMPORTANT: YOU CAN DEPOSIT TOOLS TOO!
 - deposit_to_storage ใช้ได้กับทุก item_id รวมถึง tools (wooden_axe, wooden_pickaxe, wooden_sword)
 - ถ้าเก็บ tools เข้า global storage จะเก็บ level ไว้ด้วย
@@ -211,6 +217,19 @@ inventory = [
   {{"item_id": "stone", "quantity": 30}}     ← slot 5 = เต็ม!
 ]
 ถ้าจะเก็บ gold ต้อง: deposit_to_storage(wood, 50) ก่อน!
+
+### EXAMPLE: UPGRADE ที่ต้อง deposit equipment ก่อน
+inventory = [
+  {{"item_id": "wooden_axe", "level": 2}},
+  {{"item_id": "wooden_pickaxe", "level": 3}},
+  {{"item_id": "wood", "quantity": 20}},
+  {{"item_id": "stone", "quantity": 15}},
+  {{"item_id": "gold", "quantity": 10}}    ← เต็ม 5 slots!
+]
+ถ้าต้อง upgrade stone_pickaxe (ต้องการ stone, wood, gold) แต่มี slotว่าง0
+→ ต้อง deposit equipment ที่ไม่ได้ใช้ไปก่อน: deposit_to_storage(wooden_axe, 1)
+→ ทำ upgrade: upgrade_item(stone_pickaxe)
+→ ถ้าต้องการ wooden_axe กลับมา: withdraw_from_storage(wooden_axe, 1)
 
 ### UPGRADE FORMULA
 - wooden_axe: wood=N*5, gold=N*10
