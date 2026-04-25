@@ -14,22 +14,14 @@ class LoginScreen(Screen):
             yield Label("Please Login or Signup")
             yield Input(placeholder="Username", id="username")
             yield Input(placeholder="Password", password=True, id="password")
-            yield Input(placeholder="Character Name (for signup)", id="character-name")
-            yield Label("", id="char-name-hint")
             with Horizontal(id="login-buttons"):
                 yield Button("Login", variant="primary", id="btn-login")
                 yield Button("Signup", variant="default", id="btn-signup")
             yield Label("", id="login-error")
 
-    def on_mount(self) -> None:
-        char_name_input = self.query_one("#character-name")
-        char_name_input.styles.height = "0"
-        self.query_one("#char-name-hint").styles.height = "0"
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         username = self.query_one("#username", Input).value
         password = self.query_one("#password", Input).value
-        char_name = self.query_one("#character-name", Input).value
         error_label = self.query_one("#login-error", Label)
 
         if event.button.id == "btn-login":
@@ -42,9 +34,7 @@ class LoginScreen(Screen):
             if len(username) < 3:
                 error_label.update("[red]Username must be at least 3 characters[/red]")
                 return
-            if not char_name:
-                char_name = username
-            data = self.app.api.signup(username, password, char_name)
+            data = self.app.api.signup(username, password, username)
             if data:
                 error_label.update("[green]Account created! Now login.[/green]")
             else:
@@ -90,6 +80,14 @@ class AIConfigScreen(Screen):
                 placeholder="Leave empty for default",
                 id="input-apibase"
             )
+            
+            yield Label("(Optional) Custom Objective")
+            yield Input(
+                value=self.app.ai_config.get("custom_objective", ""),
+                placeholder="E.g., Focus on upgrading wooden_axe only",
+                id="input-objective"
+            )
+            yield Label("AI will prioritize this objective when making decisions", id="objective-hint")
 
             with Horizontal(id="config-buttons"):
                 yield Button("Save", variant="primary", id="btn-save-config")
@@ -129,6 +127,7 @@ class AIConfigScreen(Screen):
                 "model": self.query_one("#select-model", Select).value or PROVIDERS.get(provider, {}).get("default_model", "gpt-4o"),
                 "language": self.query_one("#select-lang", Select).value,
                 "api_base": self.query_one("#input-apibase", Input).value,
+                "custom_objective": self.query_one("#input-objective", Input).value,
             }
             self.app.save_config()
             self.app.pop_screen()
@@ -177,6 +176,9 @@ class GameScreen(Screen):
             with Vertical(id="right-pane"):
                 yield Label("═══ AI THOUGHTS ═══", classes="pane-title")
                 yield ThoughtLog(id="thought-log")
+                with Horizontal(id="intent-bar"):
+                    yield Input(placeholder="Tell AI your intent...", id="player-intent")
+                    yield Button("Send", variant="primary", id="btn-send-intent")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -239,6 +241,26 @@ class GameScreen(Screen):
             self.stop_ai()
         elif event.button.id == "btn-config-ai":
             self.app.push_screen(AIConfigScreen())
+        elif event.button.id == "btn-send-intent":
+            self.send_player_intent()
+
+    def send_player_intent(self) -> None:
+        intent_input = self.query_one("#player-intent", Input)
+        intent = intent_input.value.strip()
+        if not intent:
+            return
+        self.thought_log.write(f"[bold yellow]► Player Intent: {intent}[/bold yellow]\n")
+        intent_input.value = ""
+        
+        if self.ai_process:
+            self.thought_log.write("[dim]Intent forwarded to AI...\n[/dim]")
+        
+        try:
+            intent_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "player_intent.txt")
+            with open(intent_file, "w") as f:
+                f.write(intent)
+        except Exception as e:
+            self.thought_log.write(f"[red]Failed to save intent: {e}[/red]\n")
 
     def start_ai(self) -> None:
         if self.ai_process is not None:
@@ -259,6 +281,7 @@ class GameScreen(Screen):
             env["AUTH_TOKEN"] = self.app.user_data.get("token", "")
             env["AI_CONFIG"] = json.dumps(self.app.ai_config)
             env["PYTHONUNBUFFERED"] = "1"
+            env["CUSTOM_OBJECTIVE"] = self.app.ai_config.get("custom_objective", "")
             
             self.ai_process = subprocess.Popen(
                 [sys.executable, "ai_agent.py"],

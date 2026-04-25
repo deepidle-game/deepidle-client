@@ -17,7 +17,6 @@ class DeepIdleApp(App):
     height: 100%;
     background: #0a0a0f;
     padding: 2;
-    border: ascii #5d4d24;
 }
 #config-container {
     width: 60;
@@ -54,13 +53,12 @@ Button {
     text-align: center;
 }
 
-/* Game Screen Styles - Rogue HUD style with ASCII borders */
+/* Game Screen Styles */
 #control-bar {
     height: 3;
     background: #0a0a0f;
     padding: 0 1;
     align: left middle;
-    border-bottom: ascii #5d4d24;
 }
 #control-bar Button {
     margin-right: 1;
@@ -75,7 +73,6 @@ Button {
 #left-pane {
     width: 38;
     height: 100%;
-    border-right: ascii #5d4d24;
     layout: vertical;
 }
 ObjectivePanel {
@@ -83,7 +80,6 @@ ObjectivePanel {
 }
 InventoryPanel {
     height: 18;
-    border-top: ascii #5d4d24;
 }
 #objectives {
     padding: 0 1;
@@ -94,8 +90,6 @@ InventoryPanel {
 }
 InventorySlot {
     height: 3;
-    border: heavy #5d4d24;
-    padding: 0 1;
     margin: 0 1;
 }
 InventorySlot.empty {
@@ -103,6 +97,7 @@ InventorySlot.empty {
 }
 ActionLog, ThoughtLog {
     height: 1fr;
+    max-height: 1fr;
     background: #141420;
     color: #87ceeb;
     overflow-x: hidden;
@@ -129,6 +124,23 @@ ActionLog, ThoughtLog {
 }
 #action-title {
     margin: 0;
+}
+#right-pane {
+    layout: vertical;
+}
+#thought-log {
+    height: 1fr;
+}
+#intent-bar {
+    height: 3;
+    align: center middle;
+}
+#intent-bar Input {
+    width: 1fr;
+    margin: 0;
+}
+#intent-bar Button {
+    margin: 0 0 0 1;
 }
     """
 

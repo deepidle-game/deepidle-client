@@ -104,6 +104,19 @@ def fetch_game_state(client):
     }
 
 
+def read_player_intent():
+    try:
+        if os.path.exists("player_intent.txt"):
+            with open("player_intent.txt", "r") as f:
+                intent = f.read().strip()
+            if intent:
+                os.remove("player_intent.txt")
+                return intent
+    except Exception:
+        pass
+    return None
+
+
 def execute_action(client, decision):
     action_type = decision.get("action")
     thought = decision.get("thought", "Thinking...")
@@ -285,6 +298,7 @@ def main():
     model = ai_config.get("model", "gpt-4o")
     api_base = ai_config.get("api_base", "")
     lang = ai_config.get("language", "Thai")
+    custom_objective = os.environ.get("CUSTOM_OBJECTIVE", "") or ai_config.get("custom_objective", "")
     
     if not token or not api_key:
         print("ERROR: No auth token or API key configured")
@@ -314,6 +328,24 @@ def main():
 
 ### TASK
 Based on the state, decide your next move. End with DECISION: action_type
+"""
+            
+            if custom_objective:
+                user_prompt += f"""
+
+### CUSTOM OBJECTIVE (PRIORITY)
+You MUST prioritize this objective: {custom_objective}
+Focus all decisions towards achieving this goal. Ignore other opportunities unless they directly support this objective.
+"""
+            
+            player_intent = read_player_intent()
+            if player_intent:
+                user_prompt += f"""
+
+### PLAYER INTENT (HIGHEST PRIORITY)
+The player has explicitly requested: "{player_intent}"
+You MUST consider this request and adjust your strategy accordingly if feasible.
+If this conflicts with safety/gold constraints, acknowledge but prioritize player wishes.
 """
             
             messages.append({"role": "user", "content": user_prompt})
